@@ -30,10 +30,6 @@ FACEBOOK: https://www.facebook.com/diymachines/
 
 */
 
-
-
-
-
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
 #endif
@@ -41,22 +37,24 @@ FACEBOOK: https://www.facebook.com/diymachines/
 #include <DS3231_Simple.h>
 DS3231_Simple Clock;
 
-// Create a variable to hold the time data 
+// Create a variable to hold the time data
 DateTime MyDateAndTime;
 
 // Which pin on the Arduino is connected to the NeoPixels?
-#define LEDCLOCK_PIN    6
-#define LEDDOWNLIGHT_PIN    5
+#define LEDCLOCK_PIN 6
+#define LEDDOWNLIGHT_PIN 5
 
 // How many NeoPixels are attached to the Arduino?
 #define LEDCLOCK_COUNT 216
 #define LEDDOWNLIGHT_COUNT 12
 
+#define BRIGHTNESS_SENSOR_PIN A0
+
 //(red * 65536) + (green * 256) + blue ->for 32-bit merged colour value so 16777215 equals white
-// or 3 hex byte 00 -> ff for RGB eg 0x123456 for red=12(hex) green=34(hex), and green=56(hex) 
+// or 3 hex byte 00 -> ff for RGB eg 0x123456 for red=12(hex) green=34(hex), and green=56(hex)
 // this hex method is the same as html colour codes just with "0x" instead of "#" in front
-uint32_t clockMinuteColour = 0x800000; // pure red 
-uint32_t clockHourColour = 0x008000;   // pure green
+uint32_t clockMinuteColour = 0x800000;  // pure red
+uint32_t clockHourColour = 0x008000;    // pure green
 
 int clockFaceBrightness = 0;
 
@@ -72,41 +70,25 @@ Adafruit_NeoPixel stripDownlighter(LEDDOWNLIGHT_COUNT, LEDDOWNLIGHT_PIN, NEO_GRB
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 
-
-//Smoothing of the readings from the light sensor so it is not too twitchy
-const int numReadings = 12;
-
-int readings[numReadings];      // the readings from the analog input
-int readIndex = 0;              // the index of the current reading
-long total = 0;                  // the running total
-long average = 0;                // the average
-
-
-
 void setup() {
-
-  Serial.begin(9600);
+  //Serial.begin(9600);
   Clock.begin();
 
-  stripClock.begin();           // INITIALIZE NeoPixel stripClock object (REQUIRED)
-  stripClock.show();            // Turn OFF all pixels ASAP
-  stripClock.setBrightness(100); // Set inital BRIGHTNESS (max = 255)
- 
+  stripClock.begin();             // INITIALIZE NeoPixel stripClock object (REQUIRED)
+  stripClock.show();              // Turn OFF all pixels ASAP
+  stripClock.setBrightness(100);  // Set inital BRIGHTNESS (max = 255)
 
-  stripDownlighter.begin();           // INITIALIZE NeoPixel stripClock object (REQUIRED)
-  stripDownlighter.show();            // Turn OFF all pixels ASAP
-  stripDownlighter.setBrightness(50); // Set BRIGHTNESS (max = 255)
-
-  //smoothing
-    // initialize all the readings to 0:
-  for (int thisReading = 0; thisReading < numReadings; thisReading++) {
-    readings[thisReading] = 0;
-  }
-  
+  stripDownlighter.begin();            // INITIALIZE NeoPixel stripClock object (REQUIRED)
+  stripDownlighter.show();             // Turn OFF all pixels ASAP
+  stripDownlighter.setBrightness(50);  // Set BRIGHTNESS (max = 255)
 }
 
 void loop() {
-  
+  setBrightness();
+  if (clockFaceBrightness == 0) {
+    stripClock.show();
+    return;
+  }
   //read the time
   readTheTime();
 
@@ -115,142 +97,118 @@ void loop() {
 
 
 
-
-  //Record a reading from the light sensor and add it to the array
-  readings[readIndex] = analogRead(A0); //get an average light level from previouse set of samples
-  Serial.print("Light sensor value added to array = ");
-  Serial.println(readings[readIndex]);
-  readIndex = readIndex + 1; // advance to the next position in the array:
-
-  // if we're at the end of the array move the index back around...
-  if (readIndex >= numReadings) {
-    // ...wrap around to the beginning:
-    readIndex = 0;
-  }
-
-  //now work out the sum of all the values in the array
-  int sumBrightness = 0;
-  for (int i=0; i < numReadings; i++)
-    {
-        sumBrightness += readings[i];
-    }
-  Serial.print("Sum of the brightness array = ");
-  Serial.println(sumBrightness);
-
-  // and calculate the average: 
-  int lightSensorValue = sumBrightness / numReadings;
-  Serial.print("Average light sensor value = ");
-  Serial.println(lightSensorValue);
-
-
-  //set the brightness based on ambiant light levels
-  clockFaceBrightness = map(lightSensorValue,50, 1000, 200, 1); 
-  stripClock.setBrightness(clockFaceBrightness); // Set brightness value of the LEDs
-  Serial.print("Mapped brightness value = ");
-  Serial.println(clockFaceBrightness);
-  
   stripClock.show();
 
-   //(red * 65536) + (green * 256) + blue ->for 32-bit merged colour value so 16777215 equals white
+  //(red * 65536) + (green * 256) + blue ->for 32-bit merged colour value so 16777215 equals white
   stripDownlighter.fill(16777215, 0, LEDDOWNLIGHT_COUNT);
   stripDownlighter.show();
 
-  delay(5000);   //this 5 second delay to slow things down during testing
-
+  //delay(500);  //this 5 second delay to slow things down during testing
 }
 
+void setBrightness() {
+  int rawSensorValue = analogRead(BRIGHTNESS_SENSOR_PIN);
+  clockFaceBrightness = map(rawSensorValue, 0, 1023, 0, 255);
+  stripClock.setBrightness(clockFaceBrightness);  // Set brightness value of the LEDs
+  Serial.print("Mapped brightness value = ");
+  Serial.println(clockFaceBrightness);
+}
 
-void readTheTime(){
+void readTheTime() {
   // Ask the clock for the data.
   MyDateAndTime = Clock.read();
-  
+
   // And use it
   Serial.println("");
-  Serial.print("Time is: ");   Serial.print(MyDateAndTime.Hour);
-  Serial.print(":"); Serial.print(MyDateAndTime.Minute);
-  Serial.print(":"); Serial.println(MyDateAndTime.Second);
-  Serial.print("Date is: 20");   Serial.print(MyDateAndTime.Year);
-  Serial.print(":");  Serial.print(MyDateAndTime.Month);
-  Serial.print(":");    Serial.println(MyDateAndTime.Day);
+  Serial.print("Time is: ");
+  Serial.print(MyDateAndTime.Hour);
+  Serial.print(":");
+  Serial.print(MyDateAndTime.Minute);
+  Serial.print(":");
+  Serial.println(MyDateAndTime.Second);
+  Serial.print("Date is: ");
+  Serial.print(MyDateAndTime.Month);
+  Serial.print("/");
+  Serial.print(MyDateAndTime.Day);
+  Serial.print("/20");
+  Serial.println(MyDateAndTime.Year);
 }
 
-void displayTheTime(){
+void displayTheTime() {
 
-  stripClock.clear(); //clear the clock face 
+  stripClock.clear();  //clear the clock face
 
-  
-  int firstMinuteDigit = MyDateAndTime.Minute % 10; //work out the value of the first digit and then display it
+
+  int firstMinuteDigit = MyDateAndTime.Minute % 10;  //work out the value of the first digit and then display it
   displayNumber(firstMinuteDigit, 0, clockMinuteColour);
 
-  
-  int secondMinuteDigit = floor(MyDateAndTime.Minute / 10); //work out the value for the second digit and then display it
-  displayNumber(secondMinuteDigit, 63, clockMinuteColour);  
+
+  int secondMinuteDigit = floor(MyDateAndTime.Minute / 10);  //work out the value for the second digit and then display it
+  displayNumber(secondMinuteDigit, 63, clockMinuteColour);
 
 
-  int firstHourDigit = MyDateAndTime.Hour; //work out the value for the third digit and then display it
-  if (firstHourDigit > 12){
+  int firstHourDigit = MyDateAndTime.Hour;  //work out the value for the third digit and then display it
+  if (firstHourDigit > 12) {
     firstHourDigit = firstHourDigit - 12;
   }
- 
- // Comment out the following three lines if you want midnight to be shown as 12:00 instead of 0:00
-//  if (firstHourDigit == 0){
-//    firstHourDigit = 12;
-//  }
- 
+
+  // Comment out the following three lines if you want midnight to be shown as 12:00 instead of 0:00
+  //  if (firstHourDigit == 0){
+  //    firstHourDigit = 12;
+  //  }
+
   firstHourDigit = firstHourDigit % 10;
   displayNumber(firstHourDigit, 126, clockHourColour);
 
 
-  int secondHourDigit = MyDateAndTime.Hour; //work out the value for the fourth digit and then display it
+  int secondHourDigit = MyDateAndTime.Hour;  //work out the value for the fourth digit and then display it
 
-// Comment out the following three lines if you want midnight to be shwon as 12:00 instead of 0:00
-//  if (secondHourDigit == 0){
-//    secondHourDigit = 12;
-//  }
- 
- if (secondHourDigit > 12){
+  // Comment out the following three lines if you want midnight to be shwon as 12:00 instead of 0:00
+  //  if (secondHourDigit == 0){
+  //    secondHourDigit = 12;
+  //  }
+
+  if (secondHourDigit > 12) {
     secondHourDigit = secondHourDigit - 12;
   }
-    if (secondHourDigit > 9){
-      stripClock.fill(clockHourColour,189, 18); 
-    }
-
+  if (secondHourDigit > 9) {
+    stripClock.fill(clockHourColour, 189, 18);
   }
+}
 
-
-void displayNumber(int digitToDisplay, int offsetBy, uint32_t colourToUse){
-    switch (digitToDisplay){
+void displayNumber(int digitToDisplay, int offsetBy, uint32_t colourToUse) {
+  switch (digitToDisplay) {
     case 0:
-    digitZero(offsetBy,colourToUse);
+      digitZero(offsetBy, colourToUse);
       break;
     case 1:
-      digitOne(offsetBy,colourToUse);
+      digitOne(offsetBy, colourToUse);
       break;
     case 2:
-    digitTwo(offsetBy,colourToUse);
+      digitTwo(offsetBy, colourToUse);
       break;
     case 3:
-    digitThree(offsetBy,colourToUse);
+      digitThree(offsetBy, colourToUse);
       break;
     case 4:
-    digitFour(offsetBy,colourToUse);
+      digitFour(offsetBy, colourToUse);
       break;
     case 5:
-    digitFive(offsetBy,colourToUse);
+      digitFive(offsetBy, colourToUse);
       break;
     case 6:
-    digitSix(offsetBy,colourToUse);
+      digitSix(offsetBy, colourToUse);
       break;
     case 7:
-    digitSeven(offsetBy,colourToUse);
+      digitSeven(offsetBy, colourToUse);
       break;
     case 8:
-    digitEight(offsetBy,colourToUse);
+      digitEight(offsetBy, colourToUse);
       break;
     case 9:
-    digitNine(offsetBy,colourToUse);
+      digitNine(offsetBy, colourToUse);
       break;
     default:
-     break;
+      break;
   }
 }
